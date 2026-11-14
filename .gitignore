@@ -3,3 +3,4 @@ MetalDocs
 dist
 *.pyc
 .pixi
+.pytest_cache

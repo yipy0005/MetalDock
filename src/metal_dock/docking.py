@@ -11,6 +11,17 @@ import numpy as np
 from scipy.spatial.distance import cdist
 from src.metal_dock.logger import MetalDockLogger
 
+
+def pdbqt_xyz(line):
+    """The x, y, z of a PDB/PDBQT atom line, read by column. AutoDock fills the columns, so a large value in the next
+    field can touch the z coordinate (for example '0.413+18.99'), which splitting on whitespace cannot read."""
+    try:
+        return float(line[30:38]), float(line[38:46]), float(line[46:54])
+    except ValueError:
+        fields = line.split()
+        return float(fields[6]), float(fields[7]), float(fields[8])
+
+
 class Docking:
     def __init__(self, par, metal_complex, protein):
         self.logger = MetalDockLogger() 
@@ -93,8 +104,8 @@ class Docking:
         with open(pdbqt_file, 'r') as fin:
             for line in fin:
                 if 'ATOM' in line or 'HETATM' in line:
-                    splits = line.strip().split()
-                    output_lines.append(f'{splits[2]:>2} {float(splits[6]):>8.3f} {float(splits[7]):>8.3f} {float(splits[8]):>8.3f}\n')
+                    x, y, z = pdbqt_xyz(line)
+                    output_lines.append(f'{line.strip().split()[2]:>2} {x:>8.3f} {y:>8.3f} {z:>8.3f}\n')
 
         # insert the total number of atoms at the top of the file
         output_lines.insert(0, f'{len(output_lines)}\n\n')
@@ -163,11 +174,11 @@ class Docking:
         # calculate all the residues that are within 4 angstroms of the ligand
         with open(protein,'r') as fin:
             for line in fin:
-                if 'ATOM' in line or 'HETATM' in line:
-                    # calculate the distance between the pose_xyz and the 
-                    split = line.strip().split()
-                    interacting_residues.append((split[3], split[5]))
-                    interacting_residues_xyz.append([float(split[6]), float(split[7]), float(split[8])])
+                if line.startswith(('ATOM', 'HETATM')):
+                    # calculate the distance between the pose_xyz and the protein atoms; read by column, because a
+                    # chain and a residue number of 1000 or more run together ('A1000') when the line is split
+                    interacting_residues.append((line[17:20].strip(), line[22:26].strip()))
+                    interacting_residues_xyz.append(list(pdbqt_xyz(line)))
 
         distance_matrix = cdist(pose_xyz, interacting_residues_xyz,'euclidean')
 
@@ -196,7 +207,7 @@ class Docking:
             content = file.read()  # Read the entire file as a string
 
         # Find all occurrences of "Estimated Free Energy of Binding" followed by a number
-        matches = re.findall(r'Estimated Free Energy of Binding\s*=\s*([-\d.]+)\s*kcal/mol', content)
+        matches = re.findall(r'Estimated Free Energy of Binding\s*=\s*([-+]?[\d.]+)\s*kcal/mol', content)
 
         # Convert matches to float values
         binding_energies = [float(value) for value in matches]
@@ -694,7 +705,8 @@ class DockingMC(Docking):
             n_atoms = 0
             for line in pdqt_file:
                 if "ATOM" in line and "DD" not in line:
-                    xyz_lines.append(f'{line.strip().split()[2]:>2}  {float(line.strip().split()[6]):>8.3f}  {float(line.strip().split()[7]):>8.3f} {float(line.strip().split()[8]):>8.3f}\n')
+                    x, y, z = pdbqt_xyz(line)
+                    xyz_lines.append(f'{line.strip().split()[2]:>2}  {x:>8.3f}  {y:>8.3f} {z:>8.3f}\n')
                     n_atoms += 1
                 else:
                     continue

@@ -16,7 +16,9 @@ from conftest import hexaammine_ruthenium, write_pdb, write_xyz
 
 
 @pytest.fixture(autouse=True)
-def clear_warnings():
+def clear_warnings(monkeypatch):
+    # pytest's temporary folders are under /tmp, which the wizard refuses for cluster jobs (see test_node_local_folder)
+    monkeypatch.setattr(m, "NODE_LOCAL_PREFIXES", ())
     m.WARNINGS.clear()
     yield
     m.WARNINGS.clear()
@@ -268,7 +270,8 @@ def test_script_orca(pdb_file, xyz_file, monkeypatch):
     s = make_settings(pdb_file, xyz_file, time_limit="2:00:00", jobdir="/data/my job", jobname="job1")
     text = m.build_script(s)
     assert "#SBATCH --partition=ncpu" in text
-    assert "#SBATCH --cpus-per-task=4" in text
+    assert "#SBATCH --ntasks=4" in text and "#SBATCH --nodes=1" in text   # mpirun counts tasks as slots
+    assert "cpus-per-task" not in text
     assert "#SBATCH --mem-per-cpu=2600M" in text
     assert "#SBATCH --time=2:00:00" in text
     assert text.index("module load ORCA/6.1.0") < text.index("module load OpenMPI/4.1.6-GCC-13.2.0")
@@ -313,6 +316,15 @@ def test_validate_folder(tmp_path):
     assert "file" in m.validate_folder(__file__, [])
     assert "itself" in m.validate_folder(str(tmp_path), [str(tmp_path)])
     assert "outside the MetalDock installation" in m.validate_folder(os.path.join(m.REPO_DIR, "x"), [])
+
+
+def test_node_local_folder_is_refused_for_cluster_jobs(monkeypatch):
+    monkeypatch.setattr(m, "NODE_LOCAL_PREFIXES", ("/tmp", "/var/tmp", "/dev/shm"))
+    for path in ("/tmp/job", "/tmp", "/var/tmp/x/y", "/dev/shm/run"):
+        assert "shared storage" in m.validate_folder(path, [], for_cluster=True)
+        assert "shared storage" not in (m.validate_folder(path, []) or "")   # fine when running here
+    # only /tmp itself and what is below it: a folder that merely starts with the same letters is not node-local
+    assert "shared storage" not in (m.validate_folder("/tmpfoo/job", [], for_cluster=True) or "")
 
 
 def test_previous_run_detection(tmp_path, pdb_file, xyz_file):

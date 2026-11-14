@@ -47,6 +47,9 @@ MAX_WATCH_ERRORS = 6
 ACTIVE_STATES = {"PENDING", "RUNNING", "REQUEUED", "RESIZING", "SUSPENDED", "COMPLETING", "CONFIGURING"}
 TOTAL_STEPS = 5
 
+# Folders that exist separately on each computer: a job running on another node would not see them.
+NODE_LOCAL_PREFIXES = ("/tmp", "/var/tmp", "/dev/shm")
+
 WATER_NAMES = {"HOH", "WAT", "H2O", "DOD", "TIP3", "SOL"}
 NUCLEIC_NAMES = {"DA", "DC", "DG", "DT", "A", "C", "G", "U", "DU", "RA", "RC", "RG", "RU"}
 
@@ -702,8 +705,10 @@ def build_script(s):
     mail = mail_address()
     lines = ["#!/bin/bash",
              f"#SBATCH --partition={s.partition}",
-             "#SBATCH --ntasks=1",
-             f"#SBATCH --cpus-per-task={s.ncpu}",
+             # One task per core on one node: ORCA starts its parallel processes with mpirun, and OpenMPI counts SLURM
+             # tasks (not cpus-per-task) as the slots it may use.
+             "#SBATCH --nodes=1",
+             f"#SBATCH --ntasks={s.ncpu}",
              f"#SBATCH --mem-per-cpu={int(s.memory * 1.3)}M",
              f"#SBATCH --job-name={s.jobname}",
              f"#SBATCH --output={os.path.join(s.jobdir, s.jobname)}_%j.log",
@@ -755,9 +760,14 @@ def previous_run(s, folder):
     return differences, finished
 
 
-def validate_folder(path, protected):
+def validate_folder(path, protected, for_cluster=False):
     if os.path.isfile(path):
         return "That is a file, not a folder."
+    if for_cluster:
+        for prefix in NODE_LOCAL_PREFIXES:
+            if path == prefix or path.startswith(prefix + os.sep):
+                return (f"{prefix} exists separately on every computer, so a cluster job would write to a folder "
+                        "on another machine that you cannot see. Choose a folder on shared storage.")
     for p in protected:
         if p and os.path.abspath(p) == path:
             return f"Please do not use {path} itself; choose a new folder inside it."
@@ -1058,7 +1068,7 @@ def step_run(s):
     default = os.path.join(os.getcwd(), stem)
     while True:
         folder = ask("Job folder", default, clean_path)
-        problem = validate_folder(folder, protected)
+        problem = validate_folder(folder, protected, for_cluster=s.mode != "run")
         if problem:
             fail(problem)
             continue
@@ -1147,7 +1157,7 @@ def check_submission(s):
     sbatch = shutil.which("sbatch")
     if sbatch is None:
         return SubmitCheck(None, "sbatch was not found")
-    command = [sbatch, "--test-only", f"--partition={s.partition}", f"--cpus-per-task={s.ncpu}",
+    command = [sbatch, "--test-only", f"--partition={s.partition}", "--nodes=1", f"--ntasks={s.ncpu}",
                f"--mem-per-cpu={int(s.memory * 1.3)}M", f"--time={s.time_limit}", "--wrap=true"]
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=SUBMIT_CHECK_SECONDS,

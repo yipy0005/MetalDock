@@ -1,0 +1,26 @@
+[workspace]
+name = "metaldock"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+version = "1.0.0"
+
+# Python 3.8 is the version MetalDock was written and tested with. The code needs `distutils`
+# (removed in Python 3.12) and ase 3.22.1.
+[dependencies]
+python = "3.8.*"
+openbabel = "*"
+ase = "==3.22.1"
+networkx = "*"
+numpy = "*"
+scipy = "*"
+pandas = "*"
+pdb2pqr = "*"
+typing_extensions = "*"
+
+# PLAMS (the ADF/AMS interface, `scm.plams`) is only on PyPI.
+[pypi-dependencies]
+plams = "*"
+
+# `pixi run metaldock -i input.ini -m dock` runs in this folder. To run in your own folder instead, see README.md.
+[tasks]
+metaldock = "python metaldock"

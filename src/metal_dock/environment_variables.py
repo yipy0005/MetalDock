@@ -1,5 +1,6 @@
 import os
 import sys
+import shutil
 import subprocess as sp
 
 from src.metal_dock.logger import MetalDockLogger
@@ -44,3 +45,10 @@ os.environ['OBABEL']=find_command_path('obabel')
 os.environ['PDB2PQR']=find_command_path('pdb2pqr30')
 os.environ['MGLTOOLS']=os.path.join(os.environ['ROOT_DIR'],'external','AutoDockTools')
 os.environ['PYTHON_3']=find_command_path('python3')
+
+# ORCA runs in parallel only when it is started by its full path. If the user has not set ASE_ORCA_COMMAND, use the
+# `orca` found on PATH (for example after `module load ORCA`).
+if 'ASE_ORCA_COMMAND' not in os.environ:
+    _orca = shutil.which('orca')
+    if _orca:
+        os.environ['ASE_ORCA_COMMAND'] = f'{_orca} PREFIX.inp > PREFIX.out'

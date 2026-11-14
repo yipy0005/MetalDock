@@ -2,3 +2,4 @@ MetalDocs
 .readthedocs.yaml
 dist
 *.pyc
+.pixi

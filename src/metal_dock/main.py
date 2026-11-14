@@ -72,7 +72,7 @@ def optimize_MC(par: MCParser, input_file: str):
     optimize_MC.optimize()
 
 def main():
-    parser = argparse.ArgumentParser(description="Docking of organometallic compounds")
+    parser = argparse.ArgumentParser(prog=os.environ.get("DDSUITE_RUN_COMMAND"), description="Docking of organometallic compounds")
     parser.add_argument("-i","--input_file", help="Input file of .ini format specifying all parameters", required=True)
     parser.add_argument("-m","--method", choices=['dock', 'mc'], help="Method to use", required=True)
     args = parser.parse_args()

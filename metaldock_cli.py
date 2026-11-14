@@ -35,8 +35,20 @@ sys.path.insert(0, REPO_DIR)
 
 # The lab's launcher (ddsuite) sets DDSUITE_RUN_COMMAND, e.g. "ddsuite metaldock". It is used in messages that tell
 # the user how to start this tool.
+
+
+def run_command(environ=None):
+    """The command that starts this tool, for messages. Under ddsuite it is `ddsuite metaldock`; on its own it is the
+    pixi command that works from any folder (a bare `metaldock` is not a command unless the user put it on PATH)."""
+    given = (os.environ if environ is None else environ).get("DDSUITE_RUN_COMMAND")
+    if given:
+        return given
+    return (f"pixi run --manifest-path {shlex.quote(os.path.join(REPO_DIR, 'pixi.toml'))} python "
+            f"{shlex.quote(os.path.join(REPO_DIR, 'metaldock_cli.py'))}")
+
+
 UNDER_DDSUITE = bool(os.environ.get("DDSUITE_RUN_COMMAND"))
-RUN_COMMAND = os.environ.get("DDSUITE_RUN_COMMAND") or "metaldock"
+RUN_COMMAND = run_command()
 
 MAIL_DOMAIN = "crick.ac.uk"
 DEFAULT_PARTITION = "ncpu"
@@ -611,8 +623,7 @@ def effective_orca_blocks(s):
 
 
 def build_ini(s):
-    lines = ["# Written by the MetalDock guided interface. Run it again with:",
-             "#   metaldock -i input.ini -m dock",
+    lines = ["# Written by the MetalDock guided interface. Run it again with the options  -i input.ini -m dock",
              "[DEFAULT]",
              f"metal_symbol = {s.metal}",
              "method = dock",

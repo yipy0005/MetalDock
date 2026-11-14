@@ -321,6 +321,27 @@ def test_validate_folder(tmp_path):
     assert "outside the MetalDock installation" in m.validate_folder(os.path.join(m.REPO_DIR, "x"), [])
 
 
+def test_run_command_names_what_the_user_can_actually_type():
+    assert m.run_command({"DDSUITE_RUN_COMMAND": "ddsuite md"}) == "ddsuite md"
+    alone = m.run_command({})
+    assert alone.startswith("pixi run --manifest-path ") and alone.endswith("metaldock_cli.py")
+    assert os.path.join(m.REPO_DIR, "pixi.toml") in alone and "python" in alone
+
+
+def test_run_command_quotes_paths_with_spaces(monkeypatch):
+    monkeypatch.setattr(m, "REPO_DIR", "/data/my tools/MetalDock")
+    assert "'/data/my tools/MetalDock/pixi.toml'" in m.run_command({})
+
+
+def test_input_file_header_does_not_depend_on_how_the_tool_was_started(pdb_file, xyz_file, monkeypatch):
+    s = make_settings(pdb_file, xyz_file)
+    monkeypatch.setenv("DDSUITE_RUN_COMMAND", "ddsuite metaldock")
+    first = m.build_ini(s)
+    monkeypatch.delenv("DDSUITE_RUN_COMMAND")
+    assert m.build_ini(s) == first      # otherwise an earlier run could not be resumed from the other start
+    assert "ddsuite" not in first.splitlines()[0] and "pixi" not in first.splitlines()[0]
+
+
 def test_node_local_folder_is_refused_for_cluster_jobs(monkeypatch):
     monkeypatch.setattr(m, "NODE_LOCAL_PREFIXES", ("/tmp", "/var/tmp", "/dev/shm"))
     for path in ("/tmp/job", "/tmp", "/var/tmp/x/y", "/dev/shm/run"):

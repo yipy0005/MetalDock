@@ -26,7 +26,8 @@ answer as you go:
 1. **Your files.** Protein PDB and metal complex XYZ. It reads both and reports what it finds (chains, other molecules,
    atoms, metals), offers to keep cofactors or ions, and checks that **charge and spin are possible for the number of
    electrons** (an impossible combination makes the quantum-chemistry job fail). Spin is the number of unpaired electrons.
-2. **Quantum chemistry.** ORCA with a quick, standard or hybrid preset (or your own keywords), ADF or Gaussian; whether to
+2. **Quantum chemistry.** ORCA (the only program the guided interface offers, as it is the one installed on the cluster) with a
+   quick, standard or hybrid preset or your own keywords; whether to
    optimise the geometry; whether the metal has a free coordination site.
 3. **Where and how to dock.** Around residues you name (for example `B1307` or `HIS57`), at typed coordinates, over
    the whole protein, or at the metal's position in the XYZ file. It warns if the site is outside the protein. Then a
@@ -50,8 +51,8 @@ ddsuite metaldock -i input.ini -m dock     # docking; use `-m mc` for Monte Carl
 ```
 
 The options are described in the [documentation](https://metaldock.readthedocs.io/en/latest/). If `ASE_ORCA_COMMAND`
-is not set, MetalDock uses the `orca` on your `PATH`, which `module load ORCA` provides. ADF needs `AMSHOME`, `AMSBIN`,
-`AMSRESOURCES` and `SCMLICENSE`, and Gaussian needs `g16root`.
+is not set, MetalDock uses the `orca` on your `PATH`, which `module load ORCA` provides. An input file can also name ADF or Gaussian
+(`engine = ADF` or `Gaussian`) if you have those licensed programs elsewhere; the guided interface does not offer them.
 
 ## On its own, without ddsuite
 

@@ -214,16 +214,22 @@ def test_ini_without_site_uses_metal_position(pdb_file, xyz_file):
     assert "dock_x" not in m.build_ini(s)
 
 
-def test_ini_box_and_other_engines(pdb_file, xyz_file):
-    s = make_settings(pdb_file, xyz_file, box=[20.0, 30.0, 25.0], engine="ADF", solvent="COSMO", relativity="ZORA",
-                      ini_parameters=True, energies=[1.0, 2.0, 3.0, 4.5])
+def test_ini_box_and_metal_energies(pdb_file, xyz_file):
+    s = make_settings(pdb_file, xyz_file, box=[20.0, 30.0, 25.0], ini_parameters=True,
+                      energies=[1.0, 2.0, 3.0, 4.5])
     text = m.build_ini(s)
     assert "box_size = 20,30,25" in text
-    assert "basis_set = TZP" in text and "relativity = ZORA" in text and "solvent = COSMO" in text
-    assert "orcasimpleinput" not in text
-    assert "e_HD = 4.5" in text
-    s.engine = "Gaussian"
-    assert "relativity" not in m.build_ini(s)
+    assert "ini_parameters = True" in text and "e_NA = 1" in text and "e_HD = 4.5" in text
+    assert "ini_parameters" not in m.build_ini(make_settings(pdb_file, xyz_file))
+
+
+def test_only_orca_is_offered(pdb_file, xyz_file):
+    """ADF and Gaussian are not available on the cluster, so the wizard writes only ORCA input."""
+    text = m.build_ini(make_settings(pdb_file, xyz_file))
+    assert "engine = ORCA" in text and "orcasimpleinput" in text
+    for word in ("ADF", "Gaussian", "basis_set", "functional"):
+        assert word not in text
+    assert not hasattr(m, "engine_status") and not hasattr(m, "QM_ENVIRONMENT")
 
 
 def test_ini_is_accepted_by_metaldock_itself(tmp_path, pdb_file, xyz_file, monkeypatch):
@@ -288,14 +294,11 @@ def test_script_without_pixi_uses_this_python(pdb_file, xyz_file, monkeypatch):
     assert m.sys.executable in text.strip().splitlines()[-1]
 
 
-def test_script_other_engines_export_their_environment(pdb_file, xyz_file, monkeypatch):
+def test_script_does_not_export_other_programs_settings(pdb_file, xyz_file, monkeypatch):
     monkeypatch.setenv("AMSHOME", "/opt/ams")
-    monkeypatch.delenv("SCMLICENSE", raising=False)
-    s = make_settings(pdb_file, xyz_file, engine="ADF", modules="")
-    text = m.build_script(s)
-    assert "export AMSHOME=/opt/ams" in text
-    assert "SCMLICENSE" not in text
-    assert "module load" not in text
+    monkeypatch.setenv("g16root", "/opt/g16")
+    text = m.build_script(make_settings(pdb_file, xyz_file))
+    assert "AMSHOME" not in text and "g16root" not in text
 
 
 def test_time_estimates(pdb_file, xyz_file):
@@ -461,7 +464,7 @@ def test_wizard_save_mode(tmp_path, pdb_file, xyz_file, monkeypatch, capsys):
     script_input(monkeypatch, [
         pdb_file, "", "",                    # protein, pH
         xyz_file, "0", "0",                  # complex, charge, spin
-        "1", "1", "2", "1",                  # ORCA, quick level, single point, vacant site
+        "1", "2", "1",                       # quick level, single point, vacant site
         "1", "A10", "", "1", "",             # site: residue A10, default box, quick search, no expert options
         "2", "", "", str(job),               # save only (without sbatch: 1 = run, 2 = save), cores, memory, folder
         "", "", "",                          # time limit, job name, change partition? (no)
@@ -490,7 +493,7 @@ def test_wizard_rejects_inconsistent_spin_then_accepts(tmp_path, pdb_file, xyz_f
         xyz_file, "1", "0",                  # charge +1 with spin 0 is impossible (103 electrons)
         "no",                                # do not change the charge...
         "1",                                 # ...so try spin 1
-        "1", "1", "2", "2",                  # ORCA quick, single point, full coordination sphere
+        "1", "2", "2",                       # quick level, single point, full coordination sphere
         "2", "5 5 5", "", "1", "",           # typed coordinates (outside the protein: warns), quick search
         "2", "2", "", str(job),              # save only, 2 cores, memory, folder
         "", "", "",                          # time limit, job name, change partition? (no)
@@ -511,7 +514,7 @@ def test_wizard_cancel_runs_nothing(tmp_path, pdb_file, xyz_file, monkeypatch, c
     job = tmp_path / "cancelled"
     script_input(monkeypatch, [
         pdb_file, "", "", xyz_file, "", "",
-        "1", "1", "2", "1",
+        "1", "2", "1",
         "1", "A10", "", "2", "",
         "2", "", "", str(job),               # save only, cores, memory, folder
         "", "", "",                          # time limit, job name, change partition? (no)

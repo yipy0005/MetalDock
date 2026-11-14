@@ -563,16 +563,9 @@ class Settings:
     clean_pdb: bool = True
     ph: float = 7.4
     # quantum chemistry
-    engine: str = "ORCA"
     qm_level: str = "standard"
     orca_simple: str = "PBE def2-TZVP CPCM(Water)"
     orca_blocks: str = ""
-    basis_set: str = "TZP"
-    functional_type: str = "GGA"
-    functional: str = "PBE"
-    dispersion: str = ""
-    solvent: str = ""
-    relativity: str = ""
     # docking
     centre: object = None            # (x, y, z) or None: the metal position in the XYZ file
     centre_text: str = ""
@@ -632,18 +625,9 @@ def build_ini(s):
              f"clean_pdb = {s.clean_pdb}",
              "",
              "[QM]",
-             f"engine = {s.engine}"]
-    if s.engine == "ORCA":
-        lines += [f"orcasimpleinput = {s.orca_simple}", f"orcablocks = {effective_orca_blocks(s)}"]
-    else:
-        lines += [f"basis_set = {s.basis_set}", f"functional_type = {s.functional_type}",
-                  f"functional = {s.functional}"]
-        if s.dispersion:
-            lines.append(f"dispersion = {s.dispersion}")
-        if s.solvent:
-            lines.append(f"solvent = {s.solvent}")
-        if s.engine == "ADF" and s.relativity:
-            lines.append(f"relativity = {s.relativity}")
+             "engine = ORCA",
+             f"orcasimpleinput = {s.orca_simple}",
+             f"orcablocks = {effective_orca_blocks(s)}"]
     lines += ["",
               "[METAL_COMPLEX]",
               f"geom_opt = {s.geom_opt}",
@@ -667,7 +651,7 @@ def build_ini(s):
 
 
 def qm_is_quick(s):
-    return s.engine == "ORCA" and s.qm_level == "quick"
+    return s.qm_level == "quick"
 
 
 def estimate_minutes(s):
@@ -686,9 +670,6 @@ def mail_address():
     except Exception:
         return None
     return f"{user}@{MAIL_DOMAIN}" if re.fullmatch(r"[A-Za-z0-9._-]+", user) else None
-
-
-QM_ENVIRONMENT = {"ADF": ["AMSHOME", "AMSBIN", "AMSRESOURCES", "SCMLICENSE"], "Gaussian": ["g16root", "GAUSS_EXEDIR"]}
 
 
 def command_line(s):
@@ -718,9 +699,6 @@ def build_script(s):
     for module in s.modules.split(","):
         if module.strip():
             lines.append(f"module load {module.strip()}")
-    for name in QM_ENVIRONMENT.get(s.engine, []):
-        if os.environ.get(name):
-            lines.append(f"export {name}={shlex.quote(os.environ[name])}")
     pixi = shutil.which("pixi")
     if pixi:
         lines += ["", f'export PATH="{os.path.dirname(pixi)}:$PATH"']
@@ -808,18 +786,6 @@ def check_environment():
         sys.exit(1)
 
 
-def engine_status():
-    """{engine: (usable here, note)}"""
-    orca = shutil.which("orca")
-    return {
-        "ORCA": (bool(orca), "found on this computer" if orca else "free; the cluster job loads the ORCA module"),
-        "ADF": (bool(os.environ.get("AMSBIN")), "set up in this shell" if os.environ.get("AMSBIN")
-                else "needs AMSHOME, AMSBIN, AMSRESOURCES and SCMLICENSE (licensed)"),
-        "Gaussian": (bool(os.environ.get("g16root")), "set up in this shell" if os.environ.get("g16root")
-                     else "needs g16root (licensed)"),
-    }
-
-
 # --------------------------------------------------------------------------
 # Steps
 # --------------------------------------------------------------------------
@@ -898,45 +864,25 @@ def step_qm(s):
     heading(2, "Quantum chemistry")
     say("  MetalDock uses a quantum-chemistry program to get the complex's geometry and atomic charges. This is\n"
         "  the slow part of a run.\n")
-    status = engine_status()
-    options = [(name, f"{name}: {status[name][1]}") for name in ("ORCA", "ADF", "Gaussian")]
-    say("  Which program?")
-    s.engine = ask_option(options, 1)
-    if s.engine == "ORCA":
-        say("\n  Level of theory:")
-        presets = [(p[0], f"{p[1]:<28} {p[2]}") for p in ORCA_PRESETS] + [("custom", "Something else (type it)")]
-        choice = ask_option(presets, 2)
-        if choice == "custom":
-            s.qm_level = "custom"
-            note("Type what you would write after the '!' in an ORCA input, for example: B3LYP def2-TZVP")
-            s.orca_simple = ask("ORCA keywords", "PBE def2-TZVP", lambda t: t.lstrip("! ").strip())
-            note("Optional ORCA blocks (the '%' parts), on one line. Do not give the number of cores; that is set "
-                 "below. Press Enter for none.")
-            s.orca_blocks = ask("ORCA blocks", "none", lambda t: "" if t.lower() == "none" else t.strip(),
-                                required=False) or ""
-            if "%pal" in s.orca_blocks.lower():
-                warn("Your blocks contain %pal. MetalDock adds the number of cores itself; remove it.")
-        else:
-            s.qm_level = choice
-            s.orca_simple = next(p[1] for p in ORCA_PRESETS if p[0] == choice)
-            s.orca_blocks = ""
-        s.modules = DEFAULT_ORCA_MODULES
+    say("  The program is ORCA (version 6.1.0, loaded for you in a cluster job).")
+    say("\n  Level of theory:")
+    presets = [(p[0], f"{p[1]:<28} {p[2]}") for p in ORCA_PRESETS] + [("custom", "Something else (type it)")]
+    choice = ask_option(presets, 2)
+    if choice == "custom":
+        s.qm_level = "custom"
+        note("Type what you would write after the '!' in an ORCA input, for example: B3LYP def2-TZVP")
+        s.orca_simple = ask("ORCA keywords", "PBE def2-TZVP", lambda t: t.lstrip("! ").strip())
+        note("Optional ORCA blocks (the '%' parts), on one line. Do not give the number of cores; that is set "
+             "below. Press Enter for none.")
+        s.orca_blocks = ask("ORCA blocks", "none", lambda t: "" if t.lower() == "none" else t.strip(),
+                            required=False) or ""
+        if "%pal" in s.orca_blocks.lower():
+            warn("Your blocks contain %pal. MetalDock adds the number of cores itself; remove it.")
     else:
-        s.qm_level = "standard"
-        s.modules = ""
-        if not status[s.engine][0]:
-            warn(f"{s.engine} does not seem to be set up in this shell. The run will fail unless the job can "
-                 f"find it. {status[s.engine][1].capitalize()}.")
-        s.basis_set = ask("Basis set", s.basis_set)
-        s.functional_type = ask("Functional type (for example GGA, hybrid)", s.functional_type)
-        s.functional = ask("Functional", s.functional)
-        s.dispersion = ask("Dispersion correction (none for none)", "none", lambda t: "" if t.lower() == "none" else t,
-                           required=False) or ""
-        s.solvent = ask("Solvent model (none for none)", "none", lambda t: "" if t.lower() == "none" else t,
-                        required=False) or ""
-        if s.engine == "ADF":
-            s.relativity = ask("Relativistic treatment (none for none, or ZORA)", "none",
-                               lambda t: "" if t.lower() == "none" else t, required=False) or ""
+        s.qm_level = choice
+        s.orca_simple = next(p[1] for p in ORCA_PRESETS if p[0] == choice)
+        s.orca_blocks = ""
+    s.modules = DEFAULT_ORCA_MODULES
     say("\n  Should the complex's geometry be optimised first?")
     options = [(True, "Yes: optimise it. Recommended unless your XYZ already comes from a DFT optimisation. "
                       "This can take many hours."),
@@ -1060,8 +1006,7 @@ def step_run(s):
         "chemistry.")
     s.ncpu = ask_number("Number of CPU cores", s.ncpu, int, 1, 128)
     s.memory = ask_number("Memory per core (MB)", s.memory, int, 500)
-    if s.engine == "ORCA":
-        note(f"Passed to ORCA as %maxcore {s.memory}; the job requests about 30% more, as ORCA can exceed it.")
+    note(f"Passed to ORCA as %maxcore {s.memory}; the job requests about 30% more, as ORCA can exceed it.")
     say("\n  Everything is kept in one job folder: your input copies, input.ini, the job script and the output.")
     protected = [s.pdb_src, s.xyz_src, os.path.dirname(s.pdb_src), os.path.dirname(s.xyz_src), os.getcwd(),
                  os.path.expanduser("~"), "/", REPO_DIR]
@@ -1387,8 +1332,7 @@ def show_results(s, job_id=None):
 # --------------------------------------------------------------------------
 def step_review(s):
     heading(5, "Review")
-    qm = (f"ORCA: {s.orca_simple}" + (f" {s.orca_blocks}" if s.orca_blocks else "")) if s.engine == "ORCA" else \
-        f"{s.engine}: {s.functional_type} {s.functional}/{s.basis_set}"
+    qm = f"ORCA: {s.orca_simple}" + (f" {s.orca_blocks}" if s.orca_blocks else "")
     complex_text = f"{s.cplx.formula}, {s.cplx.n_atoms} atoms, charge {s.charge}, {s.spin} unpaired electron(s)"
     rows = [("Protein", f"{s.pdb_src} ({s.pdb.n_atoms} atoms, chains {', '.join(s.pdb.chains)}, pH {s.ph:g})"),
             ("Metal complex", f"{s.xyz_src} ({complex_text})"),
@@ -1402,7 +1346,7 @@ def step_review(s):
             ("Cores / memory", f"{s.ncpu} / {s.memory} MB per core")]
     if s.mode != "run":
         rows += [("Partition", s.partition), ("Time limit", s.time_limit), ("Job name", s.jobname)]
-    if s.engine == "ORCA" and s.modules:
+    if s.modules:
         rows.append(("Modules", s.modules))
     action = {"submit": "Submit the job to the queue", "run": "Run MetalDock now", "save": "Save the job"}[s.mode]
     rows.append(("Action", action))
@@ -1426,7 +1370,7 @@ def write_script(s):
 
 def run_here(s):
     write_job_folder(s)
-    if s.engine == "ORCA" and not shutil.which("orca"):
+    if not shutil.which("orca"):
         fail("ORCA is not available in this shell. Run `module load ORCA/6.1.0 OpenMPI/4.1.6-GCC-13.2.0` and start "
              "again.")
         return None
